@@ -1,21 +1,24 @@
-# 7z IA Exclusive - Agente Autônomo Gemini (Protótipo)
+# 7z IA Exclusive - Agente Autônomo Gemini (Protótipo Avançado)
 
-Este projeto é um protótipo de um Agente de Inteligência Artificial Autônomo, inspirado no Manus, que utiliza a API Gemini para planejar e executar tarefas complexas. Ele é implementado como uma API Web usando **FastAPI** para receber tarefas via webhook e processá-las de forma assíncrona.
+Este projeto é um protótipo **avançado** de um Agente de Inteligência Artificial Autônomo, inspirado no Manus, que utiliza a API Gemini para planejar e executar tarefas complexas. Ele é implementado como uma API Web usando **FastAPI** para receber tarefas via webhook e processá-las de forma assíncrona.
 
-## Funcionalidades Principais
+## Novas Funcionalidades Avançadas
 
-*   **Planejamento Autônomo:** Transforma uma descrição de tarefa complexa em um plano sequencial de passos.
-*   **Execução de Fluxo de Trabalho:** Executa cada passo do plano, despachando para ferramentas simuladas (`code_generator`, `content_generator`, `web_scraper`, `data_analyzer`).
-*   **API Web (Webhook):** Recebe tarefas via `POST` e responde imediatamente, processando a tarefa em segundo plano.
-*   **Operação Assíncrona:** Utiliza `BackgroundTasks` do FastAPI para garantir que o processamento da IA não bloqueie a API.
+*   **Gerenciamento de Estado Persistente:** Utiliza **SQLite** (`tasks.db`) para rastrear o status (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`) e o resultado de cada tarefa.
+*   **Ferramentas Reais:**
+    *   **Web Scraper Real:** Implementado com `requests` e `BeautifulSoup` para coletar dados reais de notícias de IA.
+    *   **Execução de Código Seguro:** Capacidade de gerar e executar código Python em um ambiente isolado (subprocesso com timeout) para automação.
+*   **Comunicação Assíncrona Real:** Envio do resultado final via `POST` para a `callback_url` fornecida, usando `httpx`.
+*   **Endpoint de Status:** Novo endpoint `/status/{task_id}` para verificar o progresso de uma tarefa.
 
 ## Estrutura do Projeto
 
 ```
 7z_ia_exclusive/
-├── api.py              # Aplicação FastAPI e endpoint de webhook
-├── agent.py            # Classe principal do Agente Autônomo (planejamento e execução)
-├── tools.py            # Funções que simulam as ferramentas (Geração de Código, Conteúdo, etc.)
+├── api.py              # Aplicação FastAPI, endpoints de webhook e status
+├── agent.py            # Classe principal do Agente Autônomo (planejamento e execução assíncrona)
+├── tools.py            # Funções que implementam as ferramentas reais (Web Scraper, Execução de Código, etc.)
+├── db.py               # Módulo para gerenciamento do banco de dados SQLite
 ├── requirements.txt    # Dependências do Python
 └── README.md           # Este arquivo
 ```
@@ -63,7 +66,15 @@ export GEMINI_API_KEY="SUA_CHAVE_AQUI"
 
 > **Dica:** Para que a chave persista após o reboot, adicione a linha `export GEMINI_API_KEY="SUA_CHAVE_AQUI"` ao final do arquivo `~/.bashrc` ou `~/.profile`.
 
-### 5. Rodar a API
+### 5. Inicializar o Banco de Dados
+
+O banco de dados SQLite será criado automaticamente na primeira execução da API, mas você pode inicializá-lo manualmente:
+
+```bash
+python3 db.py
+```
+
+### 6. Rodar a API
 
 Use o `uvicorn` para iniciar o servidor web.
 
@@ -74,7 +85,9 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 
 A API estará acessível em `http://SEU_IP_DO_SERVIDOR:8000`.
 
-### 6. Uso do Webhook
+### 7. Uso da API
+
+#### A. Enviar Tarefa (Webhook)
 
 Para enviar uma tarefa, envie uma requisição `POST` para o endpoint `/webhook`.
 
@@ -86,18 +99,28 @@ Para enviar uma tarefa, envie uma requisição `POST` para o endpoint `/webhook`
 
 ```json
 {
-  "task_description": "Criar um script Python que faça uma pesquisa na web sobre as 3 principais notícias de IA de hoje, gere um resumo de 5 linhas para cada uma e salve o resultado em um arquivo Markdown.",
+  "task_description": "Crie um script Python que calcule o 5º número de Fibonacci e me diga o resultado.",
   "callback_url": "http://SEU_SITE_DE_CHAT/api/callback"
 }
 ```
 
-A API responderá imediatamente com `{"status": "processing", ...}` e o agente começará a trabalhar em segundo plano. O resultado final será enviado para a `callback_url` fornecida.
+A API responderá imediatamente com `{"status": "pending", "task_id": "..."}`.
+
+#### B. Verificar Status
+
+Use o `task_id` retornado para verificar o progresso da tarefa.
+
+**URL:** `http://SEU_IP_DO_SERVIDOR:8000/status/{task_id}`
+
+**Método:** `GET`
+
+O resultado final será enviado para a `callback_url` fornecida.
 
 ## Próximos Passos (Desenvolvimento)
 
-Este é um protótipo. Para torná-lo um produto completo, as seguintes melhorias são sugeridas:
+Para um sistema de produção, as seguintes melhorias são sugeridas:
 
-1.  **Ferramentas Reais:** Substituir as funções simuladas em `tools.py` por implementações reais (ex: `requests` para web scraping, `subprocess` para execução de código gerado).
-2.  **Gerenciamento de Estado:** Implementar um banco de dados (ex: SQLite ou PostgreSQL) para persistir o estado das tarefas e permitir que o usuário consulte o progresso.
-3.  **Segurança:** Adicionar autenticação e validação de webhook.
-4.  **Assincronicidade Completa:** Migrar o `google-genai` para um cliente assíncrono (se disponível) ou usar bibliotecas como `anyio` para gerenciar o `asyncio.to_thread` de forma mais robusta.
+1.  **Orquestração de Agentes:** Implementar um sistema de agentes multi-agente (ex: usando LangChain ou CrewAI) para tarefas mais complexas.
+2.  **Ferramentas de Busca:** Substituir o Web Scraper simples por uma ferramenta de busca mais robusta (ex: Google Search API).
+3.  **Segurança:** Adicionar autenticação e validação de webhook mais robustas.
+4.  **Monitoramento:** Implementar logs e métricas para monitorar a performance e o estado das tarefas.

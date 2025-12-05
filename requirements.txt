@@ -1,2 +1,6 @@
 google-genai
 pydantic
+
+httpx
+requests
+beautifulsoup4

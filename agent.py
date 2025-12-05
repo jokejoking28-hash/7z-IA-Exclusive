@@ -4,7 +4,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 from typing import List
 import asyncio
-from tools import code_generator, content_generator, web_scraper, data_analyzer
+from tools import code_generator, content_generator, web_scraper, data_analyzer, execute_python_code
 
 # --- Pydantic Schemas for Structured Output ---
 
@@ -25,11 +25,12 @@ class AutonomousAgent:
     """
     An autonomous agent that plans and executes complex tasks using the Gemini API.
     """
-    def __init__(self, model_name: str = 'gemini-2.5-flash'):
+    def __init__(self, task_id: str, model_name: str = 'gemini-2.5-flash'):
         """Initializes the Gemini client."""
         # Assumes GEMINI_API_KEY is set in the environment
         self.client = genai.Client()
         self.model_name = model_name
+        self.task_id = task_id
         self.history = [] # To maintain conversation history for context
 
     async def create_plan(self, task_description: str) -> Plan:
@@ -79,14 +80,19 @@ class AutonomousAgent:
             # For code generation, the description is the prompt for the code
             return await asyncio.to_thread(code_generator, self.client, prompt=step.description)
         
+        elif step.tool_required == 'code_execution':
+            # Execute the code generated in the previous step (which is in the context)
+            # We assume the previous step's result is the code to execute
+            # For a more robust system, we would need to parse the code from the context
+            return await asyncio.to_thread(execute_python_code, context)
+        
         elif step.tool_required == 'content_generator':
             # For content generation, the description is the prompt for the content
             return await asyncio.to_thread(content_generator, self.client, prompt=step.description)
             
         elif step.tool_required == 'web_scraper':
-            # In a real scenario, we would need to extract URL and objective from the description
-            # For this prototype, we'll use a simplified simulation
-            return await asyncio.to_thread(web_scraper, self.client, url="https://simulated.web.source", objective=step.description)
+            # The web scraper now takes the objective and uses its internal logic
+            return await asyncio.to_thread(web_scraper, self.client, objective=step.description)
             
         elif step.tool_required == 'data_analyzer':
             # In a real scenario, we would pass the actual data from the context
@@ -114,10 +120,13 @@ class AutonomousAgent:
         else:
             return f"Ferramenta desconhecida: {step.tool_required}"
 
-    async def run(self, task_description: str):
+    async def run(self, task_description: str, update_db_status: callable):
         """
         Main execution loop: plans the task and executes the steps sequentially.
         """
+        # 1. Update DB status to IN_PROGRESS
+        update_db_status(self.task_id, "IN_PROGRESS")
+        
         plan = await self.create_plan(task_description)
         print("\n--- Plano Gerado ---")
         print(f"Objetivo: {plan.task_goal}")
@@ -128,6 +137,7 @@ class AutonomousAgent:
         current_context = "Início da execução. Nenhum resultado anterior."
         
         for step in plan.phases:
+            # 2. Execute step
             result = await self.execute_step(step, current_context)
             print(f"\n[Resultado do Passo {step.step_id}]")
             print(result)
@@ -135,10 +145,14 @@ class AutonomousAgent:
             # Update context for the next step
             current_context = f"Resultado do Passo {step.step_id}: {result}"
             
-            # Optional: Ask the model to refine the plan based on the result (for a more advanced agent)
-            # For this prototype, we'll stick to sequential execution.
+            # 3. Update DB with current context (optional, for detailed logging)
+            # update_db_status(self.task_id, "IN_PROGRESS", current_context)
 
         print("\n--- Tarefa Concluída ---")
+        
+        # 4. Final update to DB status
+        update_db_status(self.task_id, "COMPLETED", current_context)
+        
         return current_context
 
 
